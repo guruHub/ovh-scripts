@@ -28,7 +28,7 @@
 # Interfaces created by this script
 # eth0.$VLAN_ID   => VLAN Interface
 #
-
+# Author: Guzmán Brasó - www.guruhub.com.uy
 
 ############# Script Config
 
@@ -46,7 +46,7 @@ HOSTNAME_BACKUP="/etc/hostname.pre-init"
 NEXT_INET_ALIAS=0
 NEXT_VLAN_ALIAS=0
 
-PUPPET_SRV="puppet.guruhub.com.uy"
+PUPPET_SRV="your.puppet.server.com"
 PUPPET_ENV="production"
 
 
