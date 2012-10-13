@@ -4,7 +4,7 @@
 #
 # This script setups hostname, puppet, interfaces configuration and launch puppet.
 #
-# eth0 is assumed comes configured with a public IP address by OVH
+# It assumes comes configured with an interface with a public IP ethX.
 #
 # This script setup a second interface connected to Virtual rack and 
 # optional can set interface aliases for the public or private addresses.
@@ -21,14 +21,14 @@
 # HOST_FQDN => Full Qualified Domain Name, eg: nsis.il.critical0.tguhost.com
 # VLAN_ID => VLAN ID for OVH Virtual Rack        
 # VLAN_ADDR => VLAN IP for nginx server to communicate with load balancer and virtual rack network.
-# alias_inet_failover=IP_ADDRESS => Use this as many times as you want to add aliases to eth0 configured as IP Failover
+# alias_inet_failover=IP_ADDRESS => Use this as many times as you want to add aliases to ethX configured as IP Failover
 # alias_vlan=IP_ADDRESS => Use this as many times as you want to add aliases to VLAN. 
 #
 #
 # Interfaces created by this script
-# eth0.$VLAN_ID   => VLAN Interface
+# ethX.$VLAN_ID   => VLAN Interface
 #
-# Author: Guzmán Brasó - www.guruhub.com.uy
+
 
 ############# Script Config
 
@@ -46,9 +46,10 @@ HOSTNAME_BACKUP="/etc/hostname.pre-init"
 NEXT_INET_ALIAS=0
 NEXT_VLAN_ALIAS=0
 
-PUPPET_SRV="your.puppet.server.com"
+PUPPET_SRV="puppet.guruhub.com.uy"
 PUPPET_ENV="production"
 
+IFACE=`ifconfig  |grep ^eth|awk '{ print $1 }'`
 
 ############# Script Functions
 
@@ -98,7 +99,7 @@ function show_usage() {
 	echo " HOST_FQDN => Full Qualified Domain Name, eg: nsis.il.critical0.tguhost.com"
 	echo " VLAN_ID => VLAN ID for OVH Virtual Rack"
 	echo " VLAN_ADDR => VLAN IP for nginx server to communicate with load balancer and virtual rack network."
-	echo " alias_inet_failover=IP_ADDRESS => Use this as many times as you want to add aliases to eth0."
+	echo " alias_inet_failover=IP_ADDRESS => Use this as many times as you want to add aliases to ethX."
 	echo " alias_vlan=IP_ADDRESS => Use this as many times as you want to add aliases to VLAN."
 	echo
 }
@@ -153,8 +154,8 @@ fi
 ####### Fun starts now!
 #
 # Enable vlan support if not already done
-if [ ! -f "/proc/sys/net/ipv4/conf/eth0.${VLAN_ID}/proxy_arp_pvlan" ]; then
-	vconfig add eth0 $VLAN_ID
+if [ ! -f "/proc/sys/net/ipv4/conf/${IFACE}.${VLAN_ID}/proxy_arp_pvlan" ]; then
+	vconfig add $IFACE $VLAN_ID
 fi
 
 
@@ -168,7 +169,7 @@ echo "
 # 
 " >> $IF_TEMPFILE
 
-# We need to add first all aliases of eth0 if any before vrack IP's.
+# We need to add first all aliases of ethX if any before vrack IP's.
 for argument in "$@"
 do
 	if [[ $argument =~ ^alias_inet_failover ]]; then
@@ -180,8 +181,8 @@ do
 		fi
 		# Add interface alias for this IP.
 		echo "# Alias #$NEXT_INET_ALIAS interface for direct internet IP Failover
-auto eth0:$NEXT_INET_ALIAS
-iface eth0:$NEXT_INET_ALIAS inet static
+auto $IFACE:$NEXT_INET_ALIAS
+iface $IFACE:$NEXT_INET_ALIAS inet static
         address $IP_ADDR
         netmask 255.255.255.255
 #" >> $IF_TEMPFILE
@@ -194,11 +195,11 @@ done
 # Add Vlan Interface
 echo "
 # Vlan Interface for Virtual Rack traffic
-auto eth0.$VLAN_ID
-iface eth0.$VLAN_ID inet static
+auto $IFACE.$VLAN_ID
+iface $IFACE.$VLAN_ID inet static
         address $VLAN_ADDR
         netmask $VLAN_NETMASK
-        vlan_raw_device eth0
+        vlan_raw_device $IFACE
 #
 " >> $IF_TEMPFILE
 
@@ -231,11 +232,11 @@ do
 		# Add interface alias for this IP.
 		echo "
 # Vlan Interface for Load Balancer traffic Version IL:
-auto eth0.$VLAN_ID:$NEXT_VLAN_ALIAS
-iface eth0.$VLAN_ID:$NEXT_VLAN_ALIAS inet static
+auto $IFACE.$VLAN_ID:$NEXT_VLAN_ALIAS
+iface $IFACE.$VLAN_ID:$NEXT_VLAN_ALIAS inet static
         address $IP_ADDR
         netmask $VLAN_NETMASK
-        vlan_raw_device eth0
+        vlan_raw_device $IFACE
 " >> $IF_TEMPFILE
 		
 		NEXT_VLAN_ALIAS=$(( $NEXT_VLAN_ALIAS + 1 ))
@@ -308,6 +309,8 @@ sed -i "s/this_env/$PUPPET_ENV/" /etc/puppet/puppet.conf
 sed -i "s/this_server/$PUPPET_SRV/" /etc/puppet/puppet.conf
 sed -i 's/START=no/START=yes/' /etc/default/puppet
 
+# Append new interface config
+cat $IF_TEMPFILE >> $IF_FILE
 # Restart network configuration
 /etc/init.d/networking restart
 
